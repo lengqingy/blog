@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>双向绑定模拟2</title>
+</head>
+<body>
+<div id="app">
+    <input type="text" v-model="text">
+    {{ text }}
+</div>
+
+<script>
+  function compile(node, vm) {
+    const reg = /\{\{(.*)\}\}/;
+    // 节点类型为 元素
+    if(node.nodeType === 1) {
+      const attr = node.attributes;
+      // 解析属性
+      for (let i = 0; i < attr.length; i++) {
+        if (attr[i].nodeName === 'v-model') {
+          const name = attr[i].nodeValue;
+          node.addEventListener('input', function (e) {
+            vm[name] = e.target.value;
+          });
+          node.value = vm[name];
+          node.removeAttribute('v-model'); // 将data的值赋值给node
+        }
+      }
+    }
+    // 节点类型为text
+    if(node.nodeType === 3) {
+      if(reg.test(node.nodeValue)) {
+        let name = RegExp.$1; // 获取匹配到的字符串
+        name = name.trim();
+//        node.nodeValue = vm[name]; // 将data的值赋值给node
+
+        new Watcher(vm, node, name);
+      }
+    }
+  }
+
+  function nodeToFragment(node, vm) {
+    const  flag = document.createDocumentFragment();
+    let  child;
+
+    while (child = node.firstChild) {
+      compile(child, vm);
+      flag.appendChild(child);
+    }
+    return flag;
+  }
+
+  function defineReactive(obj, key, val) {
+    const dep = new Dep();
+
+    Object.defineProperty(obj, key, {
+      get() {
+        // 添加订阅者watcher到主题对象Dep
+        if (Dep.target) dep.addSub(Dep.target);
+        return val;
+      },
+      set(newVal) {
+        if (newVal === val) return;
+        val = newVal;
+        // 作为发布者发出通知
+        dep.notify();
+      },
+    });
+  }
+
+  function observe(obj, vm) {
+    Object.keys(obj).forEach(function (key) {
+      defineReactive(vm, key, obj[key]);
+    });
+  }
+
+  function Watcher(vm, node, name) {
+    Dep.target = this;
+    this.name = name;
+    this.node = node;
+    this.vm = vm;
+    this.update();
+    Dep.target = null;
+  }
+  Watcher.prototype = {
+    update() {
+      this.get();
+      this.node.nodeValue = this.value;
+    },
+    // 获取data中大的属性值
+    get() {
+      this.value = this.vm[this.name];// 触发相应属性的get
+    }
+  };
+
+  function Dep() {
+    this.subs = [];
+  }
+
+  Dep.prototype = {
+    addSub(sub) {
+      this.subs.push(sub);
+    },
+    notify() {
+      this.subs.forEach(function (sub) {
+        sub.update();
+      })
+    }
+  };
+
+  function Vue(options) {
+    this.data = options.data;
+    const data = this.data;
+
+    observe(data, this);
+
+    const id = options.el;
+    const dom = nodeToFragment(document.getElementById(id), this);
+    document.getElementById(id).appendChild(dom);
+  }
+
+  const vm = new Vue({
+    el: 'app',
+    data: {
+      text: 'hello world'
+    }
+  });
+
+</script>
+
+</body>
+</html>
